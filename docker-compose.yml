@@ -71,22 +71,3 @@ services:
       TZ: Asia/Shanghai
     expose:
     - "3000"
-
-  mytest-server:
-    container_name: mytest-server
-    build:
-      context: ./
-      dockerfile: ../mytest/mytest-server-Dockerfile
-    environment:
-      TZ: Asia/Shanghai
-    working_dir: /mytest
-    volumes:
-      - ../mytest/:/mytest
-      - ~/.m2:/root/.m2
-      - ~/.mytest/logs/server:/mytest/log
-    expose:
-      - "8080"
-    command: mvn clean spring-boot:run -Dspring-boot.run.profiles=docker -Dmaven.test.skip=true
-    depends_on:
-      - fame-mysql
-    restart: always
