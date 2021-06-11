@@ -1,81 +1,121 @@
 package com.zbw.fame.service.impl;
 
-import com.zbw.fame.model.domain.Category;
-import com.zbw.fame.model.domain.Middle;
-import com.zbw.fame.model.domain.Post;
-import com.zbw.fame.repository.CategoryRepository;
-import com.zbw.fame.repository.MiddleRepository;
-import com.zbw.fame.repository.PostRepository;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.zbw.fame.exception.NotFoundException;
+import com.zbw.fame.mapper.CategoryMapper;
+import com.zbw.fame.model.dto.ArticleInfoDto;
+import com.zbw.fame.model.dto.CategoryInfoDto;
+import com.zbw.fame.model.entity.Article;
+import com.zbw.fame.model.entity.BaseEntity;
+import com.zbw.fame.model.entity.Category;
+import com.zbw.fame.model.param.SaveCategoryParam;
+import com.zbw.fame.service.ArticleCategoryService;
 import com.zbw.fame.service.CategoryService;
-import com.zbw.fame.service.MiddleService;
-import org.springframework.cache.annotation.CacheEvict;
+import com.zbw.fame.util.FameUtils;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 
-import java.util.List;
-import java.util.Set;
-
-import static com.zbw.fame.service.impl.AbstractArticleServiceImpl.ARTICLE_CACHE_NAME;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
- * @author zhangbowen
- * @since 2019/7/19 15:56
+ * @author by zzzzbw
+ * @since 2021/03/19 10:26
  */
+@Slf4j
 @Service
-public class CategoryServiceImpl extends AbstractMetaServiceImpl<Category> implements CategoryService {
+@RequiredArgsConstructor(onConstructor_ = {@Autowired, @Lazy})
+public class CategoryServiceImpl extends ServiceImpl<CategoryMapper, Category> implements CategoryService {
 
-
-    public CategoryServiceImpl(MiddleRepository middleRepository,
-                               CategoryRepository categoryRepository,
-                               PostRepository postRepository,
-                               MiddleService middleService) {
-        super(middleRepository, categoryRepository, postRepository, middleService);
-    }
+    private final ArticleCategoryService articleCategoryService;
 
     @Override
-    public Category save(String name) {
-        Category category = new Category();
-        category.setName(name);
-        return metaRepository.save(category);
+    public void delete(Integer id) {
+        recursionDelete(id);
     }
 
-    @Override
-    @CacheEvict(value = ARTICLE_CACHE_NAME, allEntries = true, beforeInvocation = true)
-    @Transactional(rollbackFor = Throwable.class)
-    public Integer delete(String name) {
-        Integer metaId = super.delete(name);
-
-        // 清除关联的文章分类
-        List<Middle> middles = middleRepository.findAllByMetaId(metaId);
-        for (Middle middle : middles) {
-            postRepository.findById(middle.getArticleId()).ifPresent(post -> {
-                post.setCategory("");
-                postRepository.save(post);
-            });
+    private void recursionDelete(Integer id) {
+        Category category = getById(id);
+        if (null == category) {
+            return;
         }
-        middleRepository.deleteAllByMetaId(metaId);
-        return metaId;
+        removeById(id);
+        articleCategoryService.deleteByCategoryId(id);
+
+        if (null != category.getParentId()) {
+            recursionDelete(category.getParentId());
+        }
     }
 
-
     @Override
-    @CacheEvict(value = ARTICLE_CACHE_NAME, allEntries = true, beforeInvocation = true)
-    @Transactional(rollbackFor = Throwable.class)
-    public Category update(Integer id, String name) {
-        Category category = super.update(id, name);
-
-        // 更新文章中的分类列表
-        Set<Integer> articleIds = middleService.getArticleIdsByMetaId(id);
-        List<Post> posts = postRepository.findAllById(articleIds);
-        for (Post post : posts) {
-            String metaStr = post.getCategory();
-            String newMetaStr = metaStr.replace(category.getName(), name);
-            if (!newMetaStr.equals(metaStr)) {
-                post.setCategory(newMetaStr);
-                postRepository.save(post);
-            }
+    public Category createOrUpdate(SaveCategoryParam param) {
+        Integer parentId = param.getParentId();
+        if (null != parentId) {
+            Optional.ofNullable(getById(parentId))
+                    .orElseThrow(() -> new NotFoundException(Category.class));
         }
+
+        Category category = FameUtils.convertTo(param, Category.class);
+        saveOrUpdate(category);
         return category;
+    }
+
+    @Override
+    public List<CategoryInfoDto> listCategoryInfo(boolean isFront) {
+        List<Category> categories = list();
+        if (CollectionUtils.isEmpty(categories)) {
+            return Collections.emptyList();
+        }
+
+        Set<Integer> categoryIds = categories
+                .stream()
+                .map(BaseEntity::getId)
+                .collect(Collectors.toSet());
+
+        Map<Integer, List<Article>> articleMap = articleCategoryService.listArticleByCategoryIds(categoryIds, isFront);
+        Map<Integer, List<Category>> childCategoryMap = categories.stream()
+                .filter(category -> null != category.getParentId())
+                .collect(Collectors.groupingBy(Category::getParentId));
+
+        return categories.stream()
+                .filter(category -> category.getParentId() == null)
+                .map(category -> categoryToCategoryInfoDto(category, childCategoryMap, articleMap))
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * Category转CategoryInfoDto
+     *
+     * @param category
+     * @param childCategoryMap
+     * @param articleMap
+     * @return
+     */
+    private CategoryInfoDto categoryToCategoryInfoDto(Category category,
+                                                      Map<Integer, List<Category>> childCategoryMap,
+                                                      Map<Integer, List<Article>> articleMap) {
+        CategoryInfoDto dto = new CategoryInfoDto();
+        dto.setId(category.getId());
+        dto.setName(category.getName());
+
+        // 填入分类下的文章信息
+        List<ArticleInfoDto> articleInfos = articleMap.getOrDefault(category.getId(), Collections.emptyList())
+                .stream()
+                .map(ArticleInfoDto::new)
+                .collect(Collectors.toList());
+        dto.setArticleInfos(articleInfos);
+
+        // 递归填入分类的子分类列表
+        List<Category> childCategory = childCategoryMap.getOrDefault(category.getId(), Collections.emptyList());
+        List<CategoryInfoDto> childCategories = childCategory.stream()
+                .map(child -> categoryToCategoryInfoDto(child, childCategoryMap, articleMap))
+                .collect(Collectors.toList());
+        dto.setChildCategories(childCategories);
+        return dto;
     }
 
 }

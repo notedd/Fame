@@ -1,42 +1,47 @@
 package com.zbw.fame.service;
 
-import com.zbw.fame.model.domain.Comment;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.baomidou.mybatisplus.extension.service.IService;
 import com.zbw.fame.model.dto.CommentDto;
+import com.zbw.fame.model.entity.Comment;
 import com.zbw.fame.model.enums.CommentAssessType;
-import org.springframework.data.domain.Page;
+import org.springframework.lang.NonNull;
+
+import java.util.Collection;
+import java.util.Map;
 
 /**
  * 评论 Service 接口
  *
- * @author zbw
+ * @author zzzzbw
  * @since 2018/1/19 16:56
  */
-public interface CommentService {
+public interface CommentService extends IService<com.zbw.fame.model.entity.Comment> {
     /**
      * 保存评论
      *
-     * @param comments 评论entity
+     * @param comment 评论entity
      */
-    void save(Comment comments);
+    void createComment(@NonNull Comment comment);
 
     /**
      * 获取文章下的评论
      *
-     * @param page      第几页
-     * @param limit     每页数量
+     * @param current   第几页
+     * @param size      每页数量
      * @param articleId 文章id
      * @return Page<Comment>
      */
-    Page<Comment> getCommentsByArticleId(Integer page, Integer limit, Integer articleId);
+    Page<Comment> pageByArticleId(Integer current, Integer size, Integer articleId);
 
     /**
      * 获取文章下的评论
      *
-     * @param page  第几页
-     * @param limit 每页数量
+     * @param current 第几页
+     * @param size    每页数量
      * @return Page<Comment>
      */
-    Page<Comment> pageAdminComments(Integer page, Integer limit);
+    Page<Comment> pageCommentAdmin(Integer current, Integer size);
 
     /**
      * 获取评论详情
@@ -44,7 +49,7 @@ public interface CommentService {
      * @param id 评论id
      * @return CommentDto
      */
-    CommentDto getCommentDetail(Integer id);
+    CommentDto getCommentDto(Integer id);
 
     /**
      * 删除评论
@@ -59,7 +64,7 @@ public interface CommentService {
      * @param articleId 文章id
      * @return 删除评论数量
      */
-    int deleteCommentByArticleId(Integer articleId);
+    int deleteByArticleId(Integer articleId);
 
     /**
      * 顶或踩评论
@@ -70,9 +75,25 @@ public interface CommentService {
     void assessComment(Integer commentId, CommentAssessType assess);
 
     /**
-     * 评论数量
+     * 新增评论
      *
-     * @return 数量
+     * @param comment 评论id
      */
-    Long count();
+    void createCommentEvent(Comment comment);
+
+    /**
+     * 文章评论数量
+     *
+     * @param articleId
+     * @return
+     */
+    int countByArticleId(Integer articleId);
+
+    /**
+     * 查询文章下的评论数量
+     *
+     * @param articleIds
+     * @return
+     */
+    Map<Integer, Long> countByArticleIds(Collection<Integer> articleIds);
 }

@@ -1,22 +1,25 @@
 package com.zbw.fame.service.impl;
 
-import com.zbw.fame.model.domain.Comment;
+import com.zbw.fame.listener.event.LogEvent;
+import com.zbw.fame.model.entity.Comment;
+import com.zbw.fame.model.enums.LogAction;
 import com.zbw.fame.model.enums.LogType;
 import com.zbw.fame.service.EmailService;
-import com.zbw.fame.service.LogService;
-import com.zbw.fame.service.OptionService;
-import com.zbw.fame.util.FameConsts;
+import com.zbw.fame.service.SysOptionService;
+import com.zbw.fame.util.FameConst;
 import com.zbw.fame.util.OptionKeys;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.mail.MailSender;
 import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.mail.javamail.JavaMailSenderImpl;
 import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.util.StringUtils;
+import org.springframework.util.ObjectUtils;
 
 import javax.mail.MessagingException;
 import javax.mail.internet.MimeMessage;
@@ -27,20 +30,17 @@ import java.util.Map;
 /**
  * 发送邮件 Service 实现类
  *
- * @author zbw
+ * @author zzzzbw
  * @since 2018/4/9 15:52
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor(onConstructor_ = @Autowired)
+@RequiredArgsConstructor(onConstructor_ = {@Autowired, @Lazy})
 public class EmailServiceImpl implements EmailService {
 
-    private final OptionService optionService;
+    private final SysOptionService sysOptionService;
 
-    private final LogService logService;
-
-    private static String LOG_MESSAGE_SEND_EMAIL_SUCCESS = "发送邮件成功";
-    private static String LOG_MESSAGE_SEND_EMAIL_FAIL = "发送邮件失败";
+    private final ApplicationEventPublisher eventPublisher;
 
     @Override
     @Async
@@ -50,17 +50,20 @@ public class EmailServiceImpl implements EmailService {
         }
 
         Map<String, String> params = getEmailParams(comment);
-        String content = FameConsts.getEmailTemplateAdminContent(params);
+        String content = FameConst.getEmailTemplateAdminContent(params);
 
         String logData = content + ";  发送给管理员";
         log.info("sendEmailToAdmin start: {}", new Date());
         try {
-            String emailUsername = optionService.get(OptionKeys.EMAIL_USERNAME);
+            String emailUsername = sysOptionService.get(OptionKeys.EMAIL_USERNAME);
             sendEmail(content, emailUsername);
-            logService.save(logData, LOG_MESSAGE_SEND_EMAIL_SUCCESS, LogType.EMAIL);
+
+            LogEvent logEvent = new LogEvent(this, logData, LogAction.SUCCESS, LogType.EMAIL);
+            eventPublisher.publishEvent(logEvent);
         } catch (Exception e) {
-            logService.save(logData, LOG_MESSAGE_SEND_EMAIL_FAIL, LogType.EMAIL);
-            log.error(e.getMessage());
+            LogEvent logEvent = new LogEvent(this, logData, LogAction.FAIL, LogType.EMAIL);
+            eventPublisher.publishEvent(logEvent);
+            log.error(e.getMessage(), e);
         }
     }
 
@@ -72,16 +75,19 @@ public class EmailServiceImpl implements EmailService {
         }
 
         Map<String, String> params = getEmailParams(comment);
-        String content = FameConsts.getEmailTemplateUserContent(params);
+        String content = FameConst.getEmailTemplateUserContent(params);
 
         String logData = content + ";  发送给:" + replyEmail;
         log.info("sendEmailToUser start: {}", new Date());
         try {
             sendEmail(content, replyEmail);
-            logService.save(logData, LOG_MESSAGE_SEND_EMAIL_SUCCESS, LogType.EMAIL);
+
+            LogEvent logEvent = new LogEvent(this, logData, LogAction.SUCCESS, LogType.EMAIL);
+            eventPublisher.publishEvent(logEvent);
         } catch (Exception e) {
-            logService.save(logData, LOG_MESSAGE_SEND_EMAIL_FAIL, LogType.EMAIL);
-            log.error(e.getMessage());
+            LogEvent logEvent = new LogEvent(this, logData, LogAction.FAIL, LogType.EMAIL);
+            eventPublisher.publishEvent(logEvent);
+            log.error(e.getMessage(), e);
         }
     }
 
@@ -92,14 +98,14 @@ public class EmailServiceImpl implements EmailService {
      * @return 是否发送邮件
      */
     private boolean isEmail(String email) {
-        boolean isEmail = optionService.get(OptionKeys.IS_EMAIL, Boolean.FALSE);
+        boolean isEmail = sysOptionService.get(OptionKeys.IS_EMAIL, Boolean.FALSE);
         if (!isEmail) {
             return false;
         }
 
-        String adminUserEmail = optionService.get(OptionKeys.EMAIL_USERNAME, "");
+        String adminUserEmail = sysOptionService.get(OptionKeys.EMAIL_USERNAME, "");
         // 如果是管理员的回复则不必通知管理员
-        return StringUtils.isEmpty(adminUserEmail) || !adminUserEmail.equals(email);
+        return ObjectUtils.isEmpty(adminUserEmail) || !adminUserEmail.equals(email);
     }
 
     /**
@@ -111,11 +117,11 @@ public class EmailServiceImpl implements EmailService {
     private Map<String, String> getEmailParams(Comment comment) {
         Map<String, String> params = new HashMap<>();
 
-        String websiteName = optionService.get(OptionKeys.BLOG_NAME);
-        String website = optionService.get(OptionKeys.BLOG_WEBSITE);
+        String websiteName = sysOptionService.get(OptionKeys.BLOG_NAME);
+        String website = sysOptionService.get(OptionKeys.BLOG_WEBSITE);
 
         // 如果网址最后没有/,则补上
-        if (!StringUtils.isEmpty(website)
+        if (!ObjectUtils.isEmpty(website)
                 && website.lastIndexOf("/") != website.length()) {
             website = website + "/";
         }
@@ -136,11 +142,11 @@ public class EmailServiceImpl implements EmailService {
      * @throws MessagingException
      */
     private void sendEmail(String content, String to) throws MessagingException {
-        String subject = optionService.get(OptionKeys.EMAIL_SUBJECT, FameConsts.DEFAULT_EMAIL_TEMPLATE_SUBJECT);
-        String host = optionService.get(OptionKeys.EMAIL_HOST);
-        Integer port = optionService.get(OptionKeys.EMAIL_PORT, 25);
-        String username = optionService.get(OptionKeys.EMAIL_USERNAME);
-        String password = optionService.get(OptionKeys.EMAIL_PASSWORD);
+        String subject = sysOptionService.get(OptionKeys.EMAIL_SUBJECT, FameConst.DEFAULT_EMAIL_TEMPLATE_SUBJECT);
+        String host = sysOptionService.get(OptionKeys.EMAIL_HOST);
+        Integer port = sysOptionService.get(OptionKeys.EMAIL_PORT, 25);
+        String username = sysOptionService.get(OptionKeys.EMAIL_USERNAME);
+        String password = sysOptionService.get(OptionKeys.EMAIL_PASSWORD);
 
         JavaMailSender mailSender = (JavaMailSender) mailSender(host, port,
                 username, password);

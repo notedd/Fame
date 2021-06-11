@@ -1,103 +1,83 @@
 package com.zbw.fame.service.impl;
 
-import com.zbw.fame.model.domain.Middle;
-import com.zbw.fame.model.domain.Post;
-import com.zbw.fame.model.domain.Tag;
-import com.zbw.fame.repository.MiddleRepository;
-import com.zbw.fame.repository.PostRepository;
-import com.zbw.fame.repository.TagRepository;
-import com.zbw.fame.service.MiddleService;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.zbw.fame.exception.TipException;
+import com.zbw.fame.mapper.TagMapper;
+import com.zbw.fame.model.dto.ArticleInfoDto;
+import com.zbw.fame.model.dto.TagInfoDto;
+import com.zbw.fame.model.entity.Article;
+import com.zbw.fame.model.entity.ArticleTag;
+import com.zbw.fame.model.entity.BaseEntity;
+import com.zbw.fame.model.entity.Tag;
+import com.zbw.fame.model.param.SaveTagParam;
+import com.zbw.fame.service.ArticleTagService;
 import com.zbw.fame.service.TagService;
-import org.springframework.cache.annotation.CacheEvict;
+import com.zbw.fame.util.FameUtils;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.CollectionUtils;
 
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
-
-import static com.zbw.fame.service.impl.AbstractArticleServiceImpl.ARTICLE_CACHE_NAME;
+import java.util.stream.Collectors;
 
 /**
- * @author zhangbowen
- * @since 2019/7/19 15:56
+ * @author by zzzzbw
+ * @since 2021/03/15 11:30
  */
+@Slf4j
 @Service
-public class TagServiceImpl extends AbstractMetaServiceImpl<Tag> implements TagService {
+@RequiredArgsConstructor(onConstructor_ = {@Autowired, @Lazy})
+public class TagServiceImpl extends ServiceImpl<TagMapper, Tag> implements TagService {
 
-
-    public TagServiceImpl(MiddleRepository middleRepository,
-                          TagRepository tagRepository,
-                          PostRepository postRepository,
-                          MiddleService middleService) {
-        super(middleRepository, tagRepository, postRepository, middleService);
-    }
+    private final ArticleTagService articleTagService;
 
     @Override
-    public Tag save(String name) {
-        Tag tag = new Tag();
-        tag.setName(name);
-        return metaRepository.save(tag);
-    }
-
-    @Override
-    @CacheEvict(value = ARTICLE_CACHE_NAME, allEntries = true, beforeInvocation = true)
-    @Transactional(rollbackFor = Throwable.class)
-    public Integer delete(String name) {
-        Integer metaId = super.delete(name);
-
-        // 清除关联的文章标签
-        List<Middle> middles = middleRepository.findAllByMetaId(metaId);
-        for (Middle middle : middles) {
-            postRepository.findById(middle.getArticleId()).ifPresent(article -> {
-                article.setTags(this.resetTagStr(name, article.getTags()));
-                postRepository.save(article);
-            });
+    public void delete(Integer id) {
+        if (!removeById(id)) {
+            throw new TipException("删除标签失败");
         }
-        middleRepository.deleteAllByMetaId(metaId);
-        return metaId;
+        articleTagService.deleteByTagId(id);
     }
 
-
     @Override
-    @CacheEvict(value = ARTICLE_CACHE_NAME, allEntries = true, beforeInvocation = true)
-    @Transactional(rollbackFor = Throwable.class)
-        public Tag update(Integer id, String name) {
-        Tag tag = super.update(id, name);
-
-        // 更新文章中的标签列表
-        Set<Integer> articleIds = middleService.getArticleIdsByMetaId(id);
-        List<Post> posts = postRepository.findAllById(articleIds);
-        for (Post post : posts) {
-            String metaStr = post.getTags();
-            String newMetaStr = metaStr.replace(tag.getName(), name);
-            if (!newMetaStr.equals(metaStr)) {
-                post.setTags(newMetaStr);
-                postRepository.save(post);
-            }
-        }
+    public Tag createOrUpdate(SaveTagParam param) {
+        Tag tag = FameUtils.convertTo(param, Tag.class);
+        saveOrUpdate(tag);
         return tag;
     }
 
+    @Override
+    public List<TagInfoDto> listTagInfo(boolean isFront) {
+        List<Tag> tags = list();
+        if (CollectionUtils.isEmpty(tags)) {
+            return Collections.emptyList();
+        }
+        Set<Integer> tagIds = tags
+                .stream()
+                .map(BaseEntity::getId)
+                .collect(Collectors.toSet());
+        Map<Integer, List<Article>> articleMap = articleTagService.listArticleByTagIds(tagIds, isFront);
 
-    /**
-     * 从标签字符串中去除一个属性
-     *
-     * @param name 标签名
-     * @param tagStr 标签字符串
-     * @return
-     */
-    private String resetTagStr(String name, String tagStr) {
-        String[] tagArr = tagStr.split(",");
-        StringBuilder sb = new StringBuilder();
-        for (String tag : tagArr) {
-            if (!name.equals(tag)) {
-                sb.append(",").append(tag);
-            }
-        }
-        if (sb.length() > 0) {
-            return sb.substring(1);
-        }
-        return "";
+        return tags.stream()
+                .map(tag -> {
+                    TagInfoDto dto = new TagInfoDto();
+                    dto.setId(tag.getId());
+                    dto.setName(tag.getName());
+
+                    List<ArticleInfoDto> articleInfoDtos = articleMap.getOrDefault(tag.getId(), Collections.emptyList())
+                            .stream()
+                            .map(ArticleInfoDto::new)
+                            .collect(Collectors.toList());
+                    dto.setArticleInfos(articleInfoDtos);
+                    return dto;
+                }).collect(Collectors.toList());
     }
-
 }

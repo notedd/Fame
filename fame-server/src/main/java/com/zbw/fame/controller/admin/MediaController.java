@@ -1,21 +1,21 @@
 package com.zbw.fame.controller.admin;
 
-import com.zbw.fame.model.domain.Media;
+
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zbw.fame.model.dto.Pagination;
+import com.zbw.fame.model.entity.Media;
 import com.zbw.fame.service.MediaService;
-import com.zbw.fame.util.FameConsts;
+import com.zbw.fame.util.FameConst;
 import com.zbw.fame.util.RestResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.servlet.http.HttpServletResponse;
-
 /**
- * @author zhangbowen
+ * @author zzzzbw
  * @since 2019/7/9 17:34
  */
 @Slf4j
@@ -34,8 +34,8 @@ public class MediaController {
      * @return {@see Page<Media>}
      */
     @GetMapping
-    public RestResponse<Pagination<Media>> index(@RequestParam(required = false, defaultValue = "0") Integer page,
-                                                 @RequestParam(required = false, defaultValue = FameConsts.PAGE_SIZE) Integer limit) {
+    public RestResponse<Pagination<Media>> index(@RequestParam(required = false, defaultValue = FameConst.DEFAULT_PAGE) Integer page,
+                                                 @RequestParam(required = false, defaultValue = FameConst.PAGE_SIZE) Integer limit) {
         Page<Media> medias = mediaService.pageAdminMedias(page, limit);
         return RestResponse.ok(Pagination.of(medias));
     }
@@ -63,7 +63,7 @@ public class MediaController {
     @PostMapping("upload")
     public RestResponse<Media> upload(@RequestPart("file") MultipartFile file,
                                       @RequestParam String name,
-                                      @RequestParam String path, HttpServletResponse response) {
+                                      @RequestParam String path) {
         log.info("name:{}, path:{}", name, path);
         Media media = mediaService.upload(file, name, path);
         return RestResponse.ok(media);
@@ -73,10 +73,10 @@ public class MediaController {
      * 删除媒体文件
      *
      * @param id 媒体id
-     * @return {@see RestResponse.ok()}
+     * @return {@link RestResponse#ok()}
      */
     @DeleteMapping("{id}")
-    public RestResponse delete(@PathVariable Integer id) {
+    public RestResponse<RestResponse.Empty> delete(@PathVariable Integer id) {
         mediaService.delete(id);
         return RestResponse.ok();
     }

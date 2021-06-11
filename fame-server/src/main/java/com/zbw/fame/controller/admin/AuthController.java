@@ -1,22 +1,24 @@
 package com.zbw.fame.controller.admin;
 
-import com.zbw.fame.model.domain.User;
+
+import com.zbw.fame.model.dto.LoginUser;
+import com.zbw.fame.model.param.LoginParam;
+import com.zbw.fame.model.param.ResetPasswordParam;
+import com.zbw.fame.model.param.ResetUserParam;
 import com.zbw.fame.service.UserService;
-import com.zbw.fame.util.FameConsts;
-import com.zbw.fame.util.FameUtil;
+import com.zbw.fame.util.FameUtils;
 import com.zbw.fame.util.RestResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.util.StringUtils;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
+import javax.validation.Valid;
 
 /**
  * 后台用户验证 Controller
  *
- * @author zbw
+ * @author zzzzbw
  * @since 2017/7/11 20:15
  */
 @RestController
@@ -24,86 +26,65 @@ import javax.servlet.http.HttpServletResponse;
 @RequiredArgsConstructor(onConstructor_ = @Autowired)
 public class AuthController {
 
-    private final HttpServletRequest request;
-
     private final UserService userService;
 
     /**
      * 后台登录
      *
-     * @param response   {@link HttpServletResponse}
-     * @param username   用户名
-     * @param password   密码
-     * @param rememberMe 是否记住
-     * @return {@see RestResponse.ok()}
+     * @return {@link RestResponse#ok()}
      */
     @PostMapping("login")
-    public RestResponse login(HttpServletResponse response, @RequestParam String username, @RequestParam String password, String rememberMe) {
-        if (StringUtils.isEmpty(username) || StringUtils.isEmpty(password)) {
-            return RestResponse.fail("用户名和密码不能为空");
-        }
-        User user = userService.login(username, password);
-        request.getSession().setAttribute(FameConsts.USER_SESSION_KEY, user);
-
+    public RestResponse<RestResponse.Empty> login(@RequestBody @Valid LoginParam param) {
+        LoginUser user = userService.login(param);
+        FameUtils.setLoginUser(user);
         return RestResponse.ok();
     }
 
     /**
      * 登出
      *
-     * @return {@see RestResponse.ok()}
+     * @return {@link RestResponse#ok()}
      */
     @PostMapping("logout")
-    public RestResponse logout() {
-        request.getSession().removeAttribute(FameConsts.USER_SESSION_KEY);
+    public RestResponse<RestResponse.Empty> logout() {
+        FameUtils.clearLoginUser();
         return RestResponse.ok();
     }
 
     /**
      * 修改用户名密码
      *
-     * @param oldPassword 旧密码
-     * @param newPassword 新密码
-     * @return {@see Boolean}
+     * @return {@link RestResponse#ok()}
      */
-    @PostMapping("reset/password")
-    public RestResponse resetPassword(@RequestParam String oldPassword, @RequestParam String newPassword) {
-        User user = FameUtil.getLoginUser();
-        if (StringUtils.isEmpty(newPassword) || StringUtils.isEmpty(oldPassword)) {
-            return RestResponse.fail("填写数据不能为空");
-        }
-
-        boolean result = userService.resetPassword(user.getUsername(), oldPassword, newPassword);
-
+    @PutMapping("reset/password")
+    public RestResponse<RestResponse.Empty> resetPassword(@RequestBody @Valid ResetPasswordParam param) {
+        LoginUser user = FameUtils.getLoginUser();
+        userService.resetPassword(user.getId(), param);
         this.logout();
-        return RestResponse.ok(result);
+        return RestResponse.ok();
     }
 
     /**
      * 修改用户信息
      *
-     * @return {@see Boolean}
+     * @return {@link RestResponse#ok()}
      */
-    @PostMapping("reset/user")
-    public RestResponse resetUser(@RequestParam String username, @RequestParam String email) {
-        User user = FameUtil.getLoginUser();
-        if (StringUtils.isEmpty(username) || StringUtils.isEmpty(email)) {
-            return RestResponse.fail("填写数据不能为空");
-        }
-
-        boolean result = userService.resetUser(user.getUsername(), username, email);
+    @PutMapping("reset/user")
+    public RestResponse<RestResponse.Empty> resetUser(@RequestBody @Valid ResetUserParam param) {
+        LoginUser user = FameUtils.getLoginUser();
+        userService.resetUser(user.getId(), param);
         this.logout();
-        return RestResponse.ok(result);
+        return RestResponse.ok();
     }
 
     /**
-     * 获取用户名
+     * 获取当前用户
      *
-     * @return {@see String}
+     * @return {@link RestResponse#ok()}
      */
     @GetMapping("user")
-    public RestResponse<User> getUser() {
-        User user = FameUtil.getLoginUser();
+    public RestResponse<LoginUser> getUser() {
+        LoginUser user = FameUtils.getLoginUser();
         return RestResponse.ok(user);
     }
 

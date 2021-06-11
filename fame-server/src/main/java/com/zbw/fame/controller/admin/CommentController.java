@@ -1,22 +1,23 @@
 package com.zbw.fame.controller.admin;
 
-import com.zbw.fame.exception.NotFoundException;
-import com.zbw.fame.model.domain.Comment;
+
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.zbw.fame.model.dto.CommentDto;
 import com.zbw.fame.model.dto.Pagination;
+import com.zbw.fame.model.entity.Comment;
 import com.zbw.fame.service.CommentService;
-import com.zbw.fame.util.FameConsts;
-import com.zbw.fame.util.FameUtil;
+import com.zbw.fame.util.FameConst;
+import com.zbw.fame.util.FameUtils;
 import com.zbw.fame.util.RestResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.domain.Page;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 /**
  * 后台评论管理 Controller
  *
- * @author zbw
+ * @author zzzzbw
  * @since 2018/1/21 10:47
  */
 @RestController
@@ -34,9 +35,9 @@ public class CommentController {
      * @return {@see Pagination<Comment>}
      */
     @GetMapping
-    public RestResponse<Pagination<Comment>> index(@RequestParam(required = false, defaultValue = "0") Integer page,
-                                                   @RequestParam(required = false, defaultValue = FameConsts.PAGE_SIZE) Integer limit) {
-        Page<Comment> comments = commentService.pageAdminComments(page, limit);
+    public RestResponse<Pagination<Comment>> index(@RequestParam(required = false, defaultValue = FameConst.DEFAULT_PAGE) Integer page,
+                                                   @RequestParam(required = false, defaultValue = FameConst.PAGE_SIZE) Integer limit) {
+        Page<Comment> comments = commentService.pageCommentAdmin(page, limit);
         return RestResponse.ok(Pagination.of(comments));
     }
 
@@ -48,11 +49,11 @@ public class CommentController {
      */
     @GetMapping("{id}")
     public RestResponse<Comment> detail(@PathVariable Integer id) {
-        CommentDto comment = commentService.getCommentDetail(id);
+        CommentDto comment = commentService.getCommentDto(id);
         if (null != comment.getParentComment()) {
-            comment.getParentComment().setContent(FameUtil.mdToHtml(comment.getParentComment().getContent()));
+            comment.getParentComment().setContent(FameUtils.mdToHtml(comment.getParentComment().getContent()));
         }
-        comment.setContent(FameUtil.mdToHtml(comment.getContent()));
+        comment.setContent(FameUtils.mdToHtml(comment.getContent()));
         return RestResponse.ok(comment);
     }
 
@@ -60,10 +61,10 @@ public class CommentController {
      * 删除评论
      *
      * @param id 评论id
-     * @return {@see RestResponse.ok()}
+     * @return {@link RestResponse#ok()}
      */
     @DeleteMapping("{id}")
-    public RestResponse delete(@PathVariable Integer id) {
+    public RestResponse<RestResponse.Empty> delete(@PathVariable Integer id) {
         commentService.deleteComment(id);
         return RestResponse.ok();
     }
@@ -74,7 +75,7 @@ public class CommentController {
      * @return {@see Integer}
      */
     @GetMapping("count")
-    public RestResponse<Long> count() {
+    public RestResponse<Integer> count() {
         return RestResponse.ok(commentService.count());
     }
 

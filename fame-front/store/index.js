@@ -7,29 +7,28 @@ export const actions = {
     commit('option/SET_DATA', data)
   },
   // 文章详情
-  async getPost({ commit }, id) {
-    const { data } = await api.getPost(id)
-    commit('post/SET_DETAIL', data)
+  async getArticle({ commit }, id) {
+    const { data } = await api.getArticle(id)
+    commit('article/SET_DETAIL', data)
   },
   // 文章列表
-  async getPosts({ commit }, params) {
-    const { data } = await api.getPosts(params.page, params.limit, params.sort)
+  async getArticles({ commit }, params) {
+    const { data } = await api.getArticles(
+      params.page,
+      params.limit,
+      params.sort
+    )
     const list = {
       data: data.list,
       totalPage: data.pages,
       currentPage: data.pageNum || 0,
     }
-    commit('post/SET_LIST', list)
+    commit('article/SET_LIST', list)
   },
-  // 自定义页面目录
-  async getNoteMenu({ commit }) {
-    const { data } = await api.getNoteMenu()
-    commit('note/SET_MENU', data)
-  },
-  // 自定义页面详情
-  async getNote({ commit }, id) {
-    const { data } = await api.getNote(id)
-    commit('note/SET_DETAIL', data)
+  // header文章
+  async getHeader({ commit }) {
+    const { data } = await api.getHeader()
+    commit('article/SET_HEADER', data)
   },
   // 分类列表
   async getCategories({ commit }) {
@@ -73,7 +72,7 @@ export const actions = {
   },
   // 赞同评论
   async agreeComment({ commit }, commentId) {
-    const res = await api.assessComment(commentId, 'AGREE')
+    const res = await api.agreeComment(commentId)
     if (res && res.success) {
       commit('comment/AGREE_COMMENT', commentId)
     }
@@ -81,7 +80,7 @@ export const actions = {
   },
   // 反对评论
   async disagreeComment({ commit }, commentId) {
-    const res = await api.assessComment(commentId, 'DISAGREE')
+    const res = await api.disagreeComment(commentId)
     if (res && res.success) {
       commit('comment/DISAGREE_COMMENT', commentId)
     }
@@ -90,6 +89,6 @@ export const actions = {
   // 全局服务初始化
   async nuxtServerInit({ dispatch }) {
     await dispatch('getOptions')
-    await dispatch('getNoteMenu')
+    await dispatch('getHeader')
   },
 }
